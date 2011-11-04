@@ -1,0 +1,5 @@
+-module(account).
+-export([creds/0]).
+
+creds() ->
+    {"jid@server.com/nick", "password"}.
