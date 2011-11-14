@@ -17,16 +17,18 @@ decode_string(Str) ->
 	    UniStr
     end.
 
-append_cur_peak(Data, Offset, Str) ->
-    Cur = binary_to_list(lists:nth(Offset + 6, Data)),
-    Peak = binary_to_list(lists:nth(Offset + 7, Data)),
-    Str ++ Cur ++ "+" ++ Peak.
+append_cur_peak(Data, Offset, {Cur, Peak}) ->
+    DataCur = binary_to_list(lists:nth(Offset + 6, Data)),
+    DataPeak = binary_to_list(lists:nth(Offset + 7, Data)),
+    {Cur ++ DataCur, Peak ++ DataPeak}.
 
-append_listeners(Data, [], Offset, Result) ->
-    append_cur_peak(Data, Offset, Result);
+append_listeners(Data, [], Offset, {Cur, Peak}) ->
+    {NewCur, NewPeak} = append_cur_peak(Data, Offset, {Cur, Peak}),
+    NewCur ++ "/" ++ NewPeak;
 
-append_listeners(Data, [_Mount|Tail], Offset, Result) ->
-    append_listeners(Data, Tail, Offset + 9, append_cur_peak(Data, Offset, Result) ++ "/").
+append_listeners(Data, [_Mount|Tail], Offset, {Cur, Peak}) ->
+    {NewCur, NewPeak} = append_cur_peak(Data, Offset, {Cur, Peak}),
+    append_listeners(Data, Tail, Offset + 9, {NewCur ++ "+", NewPeak ++ "+"}).
 
 get_title() ->
     case httpc:request(get, {"http://radioanon.ru:8000", []}, [], []) of
@@ -39,7 +41,7 @@ get_title() ->
 		[_|Tail] ->
 		    Data = mochiweb_xpath:execute("//div[@class='streamheader']/following-sibling::table//td[@class='streamdata']/text()", ParsedPage),
 		    SongTitle = unicode:characters_to_list(lists:nth(9, Data)),
-		    Title = SongTitle ++ " [" ++ append_listeners(Data, Tail, 0, "") ++ "]"
+		    Title = SongTitle ++ " [" ++ append_listeners(Data, Tail, 0, {[], []}) ++ "]"
 	    end;
 	_ ->
 	    Title = SongTitle = "Не удалось получить данные."
