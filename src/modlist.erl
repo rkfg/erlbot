@@ -4,7 +4,9 @@
 modules() ->
     [
      quit,
-     test,
      reload,
-     djcal
+     djcal,
+     join,
+     leave,
+     title
     ].

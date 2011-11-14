@@ -7,4 +7,4 @@ do(_From, _Args) ->
     "reloading...".
 
 info() ->
-    {"reload", {?MODULE, do}}.
+    {"reload", {?MODULE, do}, 0}.

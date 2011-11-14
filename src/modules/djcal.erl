@@ -1,5 +1,5 @@
 -module(djcal).
--export([do/3, info/0]).
+-export([do/2, info/0]).
 
 -define(ACCOUNT, "calendar@radioanon.ru").
 
@@ -28,7 +28,7 @@ parse_entry(Entry) ->
 		end, [], xmerl_xpath:string("title/text()", Entry)),
     "[" ++ StartTime ++ "-" ++ EndTime ++ "] " ++ Title.
 	
-do(_MainProc, _From, _Args) ->
+do(_From, _Args) ->
     {{Y, M, D}, {H, Mi, S}} = calendar:universal_time(),
     Time = lists:flatten(io_lib:format("~w-~2..0w-~2..0wT~2..0w:~2..0w:~2..0w", [Y, M, D, H, Mi, S])),
     Url = "http://www.google.com/calendar/feeds/" ++ unicode:characters_to_list(re:replace(?ACCOUNT, "@", "%40")) ++ "/public/full?orderby=starttime&start-min=" ++ Time ++ "&sortorder=a&ctz=Europe%2fMoscow&singleevents=true",
@@ -44,4 +44,4 @@ do(_MainProc, _From, _Args) ->
     end.
 
 info() ->
-    {"dj", {?MODULE, do}}.
+    {["dj", "во"], {?MODULE, do}, 10}.

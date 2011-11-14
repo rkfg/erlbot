@@ -6,4 +6,4 @@ do(_From, _Args) ->
     "выхожу...".
 
 info() ->
-    {"quit", {?MODULE, do}}.
+    {"quit", {?MODULE, do}, 0}.

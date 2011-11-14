@@ -6,7 +6,7 @@ timed_loop(_, 0) ->
 
 timed_loop(From, Counter) ->
     gen_event:notify(manager, {say, From, lists:flatten(io_lib:format("ololo #~w from ~w", [Counter, self()]))}),
-    timer:sleep(2000),
+    timer:sleep(1000),
     timed_loop(From, Counter - 1).
 
 do(From, _Args) ->
@@ -16,4 +16,4 @@ do(From, _Args) ->
     "".
 
 info() ->
-    {["test", "тест"], {?MODULE, do}}.
+    {["test", "тест"], {?MODULE, do}, 10}.

@@ -19,11 +19,13 @@
 -include_lib("exmpp/include/exmpp_client.hrl").
 
 -behavior(gen_event).
--export([start/0, start/2, join_room/4, leave_room/4, loop/0, session_link/2, talker/1, talker_link/0, emptyloop/0]).
+-export([start/0, start/2, loop/0, session_link/2, talker/1, talker_link/0, emptyloop/0]).
 -export([init/1, handle_event/2, code_change/3, handle_call/2, handle_info/2, terminate/2]).
 
 -define(LOG(M), io:format(M)).
 -define(LOG(M, A), io:format(M, A)).
+-define(FMT(M, A), lists:flatten(io_lib:format(M, A))).
+-define(PREFIX, "!").
 
 init([JID, Password]) ->
     {ok, TalkerPID} = supervisor:start_child(jbsup, {talkerid, {?MODULE, talker_link, []}, permanent, 5000, worker, [jbot]}),
@@ -54,7 +56,6 @@ session_link(JID, Password) ->
 session(JID, Password) ->
     %%timer:sleep(1000),
     MySession = exmpp_session:start({1, 0}),
-    gen_event:notify(manager, {talkersession, MySession}),
     %% Create XMPP ID (Session Key):
     [User, Server] = string:tokens(JID, "@"),
     MyJID = case string:tokens(Server, "/") of
@@ -81,7 +82,8 @@ session(JID, Password) ->
     exmpp_session:send_packet(MySession,
 			      exmpp_presence:set_status(
 				exmpp_presence:available(), "Echo Ready")),
-    join_room(MySession, "erlytest", "conference.jabber.ru", "erlybot"),
+    lists:map(fun(Room) -> join_room(MySession, Room, account:nick()) end, account:join_conf()),
+    gen_event:notify(manager, {talkersession, MySession}),
     gen_event:notify(manager, load_commands),
     loop().
 
@@ -93,13 +95,13 @@ load_command([Com | Rest], Result) ->
     	    ok
     end,
     code:load_file(Com),
-    {Commands, Function} = Com:info(),
-    io:format("Processing ~p, Result is ~p~n", [{Commands, Function}, Result]),
+    {Commands, Function, Level} = Com:info(),
+    io:format("Processing ~p, Result is ~p~n", [{Commands, {Function, Level}}, Result]),
     case Commands of
 	[A|_] when is_list(A) ->
-	    load_command(Rest, Result ++ [{Command, Function} || Command <- Commands]);
+	    load_command(Rest, Result ++ [{Command, {Function, Level}} || Command <- Commands]);
 	_ ->
-	    load_command(Rest, Result ++ [{Commands, Function}])
+	    load_command(Rest, Result ++ [{Commands, {Function, Level}}])
     end;
 
 load_command([], Result) ->
@@ -107,9 +109,15 @@ load_command([], Result) ->
 
 join_room(Session, Room, Server, Nick) ->
     exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:available(), Room ++ "@" ++ Server ++ "/" ++ Nick)).
+
+join_room(Session, Room, Nick) ->
+    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:available(), Room ++ "/" ++ Nick)).
     
 leave_room(Session, Room, Server, Nick) ->
     exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:unavailable(), Room ++ "@" ++ Server ++ "/" ++ Nick)).
+
+leave_room(Session, Room, Nick) ->
+    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:unavailable(), Room ++ "/" ++ Nick)).
 
 talker_link() ->
     TalkerPID = spawn_link(?MODULE, talker, [false]),
@@ -118,21 +126,33 @@ talker_link() ->
 
 talker(Session) ->
     receive
-	{say, To, Text} ->
-	    if
-		is_binary(Text) ->
-		    io:format("Saying ~ts in ~ts~n", [unicode:characters_to_list(Text), To]);
-		true ->
-		    io:format("Saying ~ts in ~ts~n", [unicode:characters_to_list(list_to_binary(Text)), To])
+	{TalkAction, To, Text} when Session =/= false ->
+	    UniText =  if
+			   is_binary(Text) ->
+			       unicode:characters_to_list(Text);
+			   true ->
+			       try unicode:characters_to_list(list_to_binary(Text))
+			       catch
+				   _:_ ->
+				       unicode:characters_to_list(unicode:characters_to_binary(Text))
+			       end
+		       end,
+	    io:format("Saying ~ts in ~ts~n", [UniText, To]),
+	    GroupArgs = case TalkAction of
+		say ->
+		    [unicode:characters_to_binary(UniText)];
+		subject ->
+		    [unicode:characters_to_binary(UniText), unicode:characters_to_binary(UniText)];
+		_ ->
+		    ["Fail!"]
 	    end,
-	    if
-		Session =/= false ->
-		    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_message:groupchat(unicode:characters_to_binary(Text)), To));
-		true ->
-		    ok
-	    end,
+	    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(apply(exmpp_message, groupchat, GroupArgs), To)),
 	    timer:sleep(2000),
 	    talker(Session);
+	%% resend the message if session isn't established yet
+	Message = {_TalkAction, _To, _Text} ->
+	    timer:sleep(2000),
+	    self() ! Message;
 	upgrade ->
 	    ?MODULE:talker(Session);
 	{session, NewSession} ->
@@ -152,6 +172,9 @@ handle_event(reload, State = {_Session, _Commands, TalkerPID, Self}) ->
     code:load_file(?MODULE),
     code:purge(modlist),
     code:load_file(modlist),
+    code:purge(account),
+    code:load_file(account),
+    gen_event:notify(manager, load_commands),
     TalkerPID ! upgrade,
     Self ! upgrade,
     {ok, State};
@@ -162,7 +185,7 @@ handle_event(load_commands, {Session, _Commands, TalkerPID, Self}) ->
     io:format("Commands: ~p, Modules: ~p~n", [Commands, Mods]),
     {ok, {Session, Commands, TalkerPID, Self}};
 
-handle_event(Response = {say, _To, _Text}, State = {_Session, _Commands, TalkerPID, _Self}) ->
+handle_event(Response = {TalkAction, _To, _Text}, State = {_Session, _Commands, TalkerPID, _Self}) when TalkAction =:= say orelse TalkAction =:= subject ->
     TalkerPID ! Response,
     {ok, State};
 
@@ -171,11 +194,12 @@ handle_event({message, Packet}, State = {_Session, Commands, _TalkerPID, _Self})
     io:format("Message: ~ts in ~w~n", [unicode:characters_to_list(RawMessage), self()]),
     Message = binary_to_list(RawMessage),
     case Message of
-	"*" ++ Command ->
+	?PREFIX ++ Command ->
 	    [Cmd | Args] = string:tokens(Command, " "),
 	    case dict:find(Cmd, Commands) of
-		{ok, Fun} ->
-		    spawn(fun() -> responder(Fun, Args, [binary_to_list(X) || X <- tuple_to_list(Packet#received_packet.from)]) end);
+		{ok, {Fun, Level}} ->
+		    ?LOG("Found fun!~n"),
+		    spawn(fun() -> responder(Fun, Args, [unicode:characters_to_list(X) || X <- tuple_to_list(Packet#received_packet.from)], Level) end);
 		_ ->
 		    ok
 	    end;
@@ -212,6 +236,14 @@ handle_event({selfpid, Self}, {Session, Commands, TalkerPID, _OldSelf}) ->
     ?LOG("Setting selfpid~n"),
     {ok, {Session, Commands, TalkerPID, Self}};
 
+handle_event({join, JID, Nick}, State = {Session, _, _, _}) ->
+    join_room(Session, JID, Nick),
+    {ok, State};
+
+handle_event({leave, JID, Nick}, State = {Session, _, _, _}) ->
+    leave_room(Session, JID, Nick),
+    {ok, State};
+
 handle_event({talkersession, Session}, {_Session, Commands, TalkerPID, Self}) ->
     ?LOG("Setting session~n"),
     TalkerPID ! {session, Session},
@@ -237,9 +269,23 @@ loop() ->
 				  type_attr=Type,
 				  raw_packet=Raw} when Type == "error" ->
 	    io:format("Received an error stanza:~n~p~n~n", [Record]),
-	    To = exmpp_stanza:get_sender(Raw),
-	    Body = exmpp_message:get_body(Raw),
-	    gen_event:notify(manager, {say, To, Body}),
+	    Error = exmpp_stanza:get_error(Raw),
+	    Code = exmpp_xml:get_attribute_as_list(Error, <<"code">>, "406"),
+	    ?LOG("Error code: ~p~n", [Code]),
+	    Action = case Code of
+			 "500" ->
+			     retry;
+			 _ ->
+			     nothing
+		     end,
+	    case Action of
+		retry ->
+		    To = exmpp_stanza:get_sender(Raw),
+		    Body = exmpp_message:get_body(Raw),
+		    gen_event:notify(manager, {say, To, Body});
+		_ ->
+		    ok
+	    end,
 	    loop();
 
 	Record when Record#received_packet.packet_type == 'presence' ->
@@ -251,20 +297,41 @@ loop() ->
             loop()
     end.
 
-responder(Fun, Args, FromJID) ->
+responder(Fun, Args, FromJID, Level) ->
     ?LOG("In responder: ~p, ~p, ~p~n", [Fun, Args, FromJID]),
     {M, F} = Fun,
-    [Node, Domain, Resource] = FromJID,
+    [Node, Domain, Nick] = FromJID,
     Recipient = Node ++ "@" ++ Domain,
-
-    case M:F(FromJID, Args) of
-	"" ->
-	    ok;
-	Reply ->	
-	    Response = Resource ++ ", " ++ Reply,
-	    gen_event:notify(manager, {say, Recipient, Response})
+    Levels = account:access(),
+    Respond = if
+		  Level == 10 ->
+		      true;
+		  true ->
+		      case lists:filter(fun({AccType, AccNick, AccLev}) -> AccType == nick andalso AccNick =:= Nick andalso AccLev >= Level end, Levels) of
+			  [_User|_Tail] ->
+			      true;
+			  _ ->
+			      io:format("Level error~n"),
+			      false
+		      end
+	      end,
+    Response = if
+		   Respond ->
+		       case M:F(FromJID, Args) of
+			   "" ->
+			       empty;
+			   Reply ->	
+			       Nick ++ ", " ++ Reply
+		       end;
+		   true ->
+		       ?FMT("~ts, недостаточно прав для выполнения команды.", [Nick])
+	       end,
+    if
+	Response =/= empty ->
+	    gen_event:notify(manager, {say, Recipient, Response});
+	true->
+	    ok
     end.
-
 
 presence_subscribed(Session, Recipient) ->
     Presence_Subscribed = exmpp_presence:subscribed(),
