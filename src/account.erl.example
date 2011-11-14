@@ -1,5 +1,17 @@
 -module(account).
--export([creds/0]).
+-export([creds/0, access/0, join_conf/0, title_announce/0, nick/0]).
 
 creds() ->
-    {"jid@server.com/nick", "password"}.
+    {"jid@server.com/" ++ nick(), "password"}.
+
+access() ->
+    [{nick, "eurekafag", 0}]. %% only nicks are supported ATM. {nick, "tehnick", Level}
+
+join_conf() ->
+    ["radiochan@conference.jabber.ru"].
+
+title_announce() ->
+    ["radiochan@conference.jabber.ru"].
+
+nick() ->
+    "erlybot".
