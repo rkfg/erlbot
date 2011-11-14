@@ -40,6 +40,7 @@ start() ->
 start(JID, Password) ->
     application:start(exmpp),
     gen_event:start({local, manager}),
+    iconv:start(),
     ?LOG("Supervisor status: ~p~n", [supervisor:start_link({local, jbsup}, jbot_sup, [])]),
     gen_event:add_handler(manager, ?MODULE, [JID, Password]),
     emptyloop().
@@ -126,7 +127,7 @@ talker_link() ->
 
 talker(Session) ->
     receive
-	{TalkAction, To, Text} when Session =/= false ->
+	{TalkAction, To, Text} when Session =/= false andalso (TalkAction =:= say orelse TalkAction =:= subject)->
 	    UniText =  if
 			   is_binary(Text) ->
 			       unicode:characters_to_list(Text);
@@ -150,7 +151,7 @@ talker(Session) ->
 	    timer:sleep(2000),
 	    talker(Session);
 	%% resend the message if session isn't established yet
-	Message = {_TalkAction, _To, _Text} ->
+	Message = {TalkAction, _To, _Text} when TalkAction =:= say orelse TalkAction =:= subject ->
 	    timer:sleep(2000),
 	    self() ! Message;
 	upgrade ->

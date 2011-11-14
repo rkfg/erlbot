@@ -3,7 +3,19 @@
 
 do(_From, _Args) ->
     {_, Title} = get_title(),
-    Title.
+    decode_string(Title).
+
+decode_string(Str) ->
+    UniStr = unicode:characters_to_binary(Str),
+    case re:run(UniStr, "[À-ÿ]{5}", [unicode]) of
+	{match, _} ->
+	    {ok, CD} = iconv:open("utf-8", "cp1251"),
+	    {ok, Result} = iconv:conv(CD, UniStr),
+	    iconv:close(CD),
+	    Result;
+	nomatch ->
+	    UniStr
+    end.
 
 append_cur_peak(Data, Offset, Str) ->
     Cur = binary_to_list(lists:nth(Offset + 6, Data)),
@@ -38,11 +50,11 @@ update_loop(LastTitle) ->
     receive
 	reload ->
 	    title:update_loop()
-    after 5000 ->
+    after 10000 ->
 	    {SongTitle, Title} = get_title(),
 	    if
 		LastTitle =/= SongTitle ->
-		    lists:map(fun(Room) -> gen_event:notify(manager, {subject, Room, Title}) end, account:title_announce());
+		    lists:map(fun(Room) -> gen_event:notify(manager, {subject, Room, decode_string(Title)}) end, account:title_announce());
 		true ->
 		    ok
 	    end,
