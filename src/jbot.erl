@@ -31,7 +31,11 @@ init([JID, Password]) ->
     {ok, TalkerPID} = supervisor:start_child(jbsup, {talkerid, {?MODULE, talker_link, []}, permanent, 5000, worker, [jbot]}),
     {ok, Self} = supervisor:start_child(jbsup, {coreid, {?MODULE, session_link, [JID, Password]}, permanent, 5000, worker, [jbot]}),
     ?LOG("Self = ~w, TalkerPID = ~w~n", [Self, TalkerPID]),
-    {ok, {false, [], TalkerPID, Self}}.
+    {ok, {false, [], TalkerPID, Self}};
+
+init(State) ->
+    io:format("Reinitializing with state ~p~n", [State]),
+    {ok, State}.
 
 start() ->
     {JID, Password} = account:creds(),
@@ -195,7 +199,7 @@ handle_event({message, Packet}, State = {_Session, Commands, _TalkerPID, _Self})
     io:format("Message: ~ts in ~w~n", [unicode:characters_to_list(RawMessage), self()]),
     Message = binary_to_list(RawMessage),
     case Message of
-	?PREFIX ++ Command ->
+	?PREFIX ++ Command when Command =/= ""->
 	    [Cmd | Args] = string:tokens(Command, " "),
 	    case dict:find(Cmd, Commands) of
 		{ok, {Fun, Level}} ->
@@ -255,7 +259,7 @@ loop() ->
     receive
 	upgrade ->
 	    ?MODULE:loop();
-
+	
         Record = #received_packet{packet_type=message,
 				  type_attr=Type} when Type =/= "error" ->
 	    case exmpp_xml:get_element_by_ns(Record#received_packet.raw_packet, 'jabber:x:delay') of
@@ -353,5 +357,7 @@ handle_call(Request, State) ->
 handle_info(_Info, State) ->
     {ok, State}.
 
-terminate(_Arg, _State) ->
+terminate(Arg, State = {_Session, _Commands, _TalkerPID, _Self}) ->
+    io:format("Terminate: ~p~n", [Arg]),
+    spawn(fun() -> gen_event:add_handler(manager, ?MODULE, State) end),
     ok.

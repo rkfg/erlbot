@@ -6,9 +6,12 @@ do(_From, _Args) ->
     decode_string(Title).
 
 decode_string(Str) ->
+    io:format("Decoding ~p~n", [Str]),
     UniStr = unicode:characters_to_binary(Str),
-    case re:run(UniStr, "[À-ÿ]{5}", [unicode]) of
+    io:format("Decoding uni ~p~n", [UniStr]),
+    case re:run(Str, "[À-ÿ]{3}", [unicode]) of
 	{match, _} ->
+	    io:format("Decoding..."),
 	    {ok, CD} = iconv:open("utf-8", "cp1251"),
 	    {ok, Result} = iconv:conv(CD, UniStr),
 	    iconv:close(CD),
