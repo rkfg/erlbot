@@ -6,18 +6,32 @@ do(_From, _Args) ->
     decode_string(Title).
 
 decode_string(Str) ->
-    io:format("Decoding ~p~n", [Str]),
-    UniStr = unicode:characters_to_binary(Str),
-    io:format("Decoding uni ~p~n", [UniStr]),
-    case re:run(Str, "[À-ÿ]{3}", [unicode]) of
+    io:format("~w~n", [Str]),
+    case re:run(Str, <<"[À-ÿ]{3}">>, [unicode]) of
 	{match, _} ->
-	    io:format("Decoding..."),
-	    {ok, CD} = iconv:open("utf-8", "cp1251"),
-	    {ok, Result} = iconv:conv(CD, UniStr),
-	    iconv:close(CD),
+	    %%Latin = mbcs:encode(Str, cp1252),
+	    Result = case mbcs:decode(Str, cp1251) of
+			 {error, _} ->
+			     Str;
+			 Decoded ->
+			     Decoded
+		     end,
 	    Result;
 	nomatch ->
-	    UniStr
+	    %% try double-utf8
+	    UniStr = try list_to_binary(Str) of
+			 R ->
+			     R
+		     catch
+			 _:_ ->
+			     Str
+		     end,
+	    case mbcs:decode(UniStr, utf8) of
+		{error, _} ->
+		    Str;
+		Result ->
+		    Result
+	    end
     end.
 
 append_cur_peak(Data, Offset, {Cur, Peak}) ->

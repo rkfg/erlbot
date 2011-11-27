@@ -44,7 +44,7 @@ start() ->
 start(JID, Password) ->
     application:start(exmpp),
     gen_event:start({local, manager}),
-    iconv:start(),
+    mbcs:start(),
     ?LOG("Supervisor status: ~p~n", [supervisor:start_link({local, jbsup}, jbot_sup, [])]),
     gen_event:add_handler(manager, ?MODULE, [JID, Password]),
     emptyloop().
