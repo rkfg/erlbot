@@ -42,6 +42,7 @@ start() ->
     start(JID, Password).
 
 start(JID, Password) ->
+    io:setopts(standard_io, [{encoding, unicode}]),
     application:start(exmpp),
     gen_event:start({local, manager}),
     mbcs:start(),
@@ -132,14 +133,16 @@ talker_link() ->
 talker(Session) ->
     receive
 	{TalkAction, To, Text} when Session =/= false andalso (TalkAction =:= say orelse TalkAction =:= subject)->
-	    UniText =  if
+	    UniText = if
 			   is_binary(Text) ->
 			       unicode:characters_to_list(Text);
 			   true ->
-			       try unicode:characters_to_list(list_to_binary(Text))
+			       try list_to_binary(Text) of
+                                   R ->
+                                       unicode:characters_to_list(R)
 			       catch
 				   _:_ ->
-				       unicode:characters_to_list(unicode:characters_to_binary(Text))
+				       Text
 			       end
 		       end,
 	    io:format("Saying ~ts in ~ts~n", [UniText, To]),
@@ -329,7 +332,7 @@ responder(Fun, Args, FromJID, Level) ->
 			       Nick ++ ", " ++ Reply
 		       end;
 		   true ->
-		       ?FMT("~ts, недостаточно прав для выполнения команды.", [Nick])
+		       ?FMT("~s, недостаточно прав для выполнения команды.", [unicode:characters_to_binary(Nick)])
 	       end,
     if
 	Response =/= empty ->
