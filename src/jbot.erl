@@ -86,7 +86,7 @@ session(JID, Password) ->
     %% We explicitely send presence:
     exmpp_session:send_packet(MySession,
 			      exmpp_presence:set_status(
-				exmpp_presence:available(), "Echo Ready")),
+				exmpp_presence:available(), "Miria bot")),
     lists:map(fun(Room) -> join_room(MySession, Room, account:nick()) end, account:join_conf()),
     gen_event:notify(manager, {talkersession, MySession}),
     gen_event:notify(manager, load_commands),

@@ -9,7 +9,7 @@ do(_From, Args) ->
 	    "вхожу в " ++ Room;
 	[Room, Nick] ->
 	    gen_event:notify(manager, {join, Room, Nick}),
-	    "вхожу в " ++ Room ++ " под ником" ++ Nick;
+	    "вхожу в " ++ Room ++ " под ником " ++ Nick;
 	_ ->
 	    "неверные параметры"
     end.
