@@ -132,14 +132,20 @@ talker_link() ->
 
 talker(Session) ->
     receive
-	{TalkAction, To, Text} when Session =/= false andalso (TalkAction =:= say orelse TalkAction =:= subject)->
+	{TalkAction, To, Text} when Session =/= false andalso (TalkAction =:= say orelse TalkAction =:= subject) andalso is_list(Text) ->
 	    UniText = if
 			   is_binary(Text) ->
-			       unicode:characters_to_list(Text);
+                               case unicode:characters_to_list(Text) of
+                                   {error, _, _} -> Text;
+                                   R -> R
+                               end;
 			   true ->
 			       try list_to_binary(Text) of
                                    R ->
-                                       unicode:characters_to_list(R)
+                                       case unicode:characters_to_list(R) of
+                                           {error, _, _} -> Text;
+                                           R2 -> R2
+                                       end
 			       catch
 				   _:_ ->
 				       Text
@@ -158,7 +164,7 @@ talker(Session) ->
 	    timer:sleep(2000),
 	    talker(Session);
 	%% resend the message if session isn't established yet
-	Message = {TalkAction, _To, _Text} when TalkAction =:= say orelse TalkAction =:= subject ->
+	Message = {TalkAction, _To, Text} when (TalkAction =:= say orelse TalkAction =:= subject) andalso is_list(Text) ->
 	    timer:sleep(2000),
 	    self() ! Message;
 	upgrade ->

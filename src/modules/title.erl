@@ -11,9 +11,9 @@ decode_string(Str) ->
 	{match, _} ->
 	    %%Latin = mbcs:encode(Str, cp1252),
 	    Result = case mbcs:decode(Str, cp1251) of
-			 {error, _} ->
+			 {error, _, _} ->
 			     Str;
-			 Decoded ->
+		          Decoded ->
 			     Decoded
 		     end,
 	    Result;
@@ -27,7 +27,7 @@ decode_string(Str) ->
 			     Str
 		     end,
 	    case mbcs:decode(UniStr, utf8) of
-		{error, _} ->
+		{error, _, _} ->
 		    Str;
 		Result ->
 		    Result
