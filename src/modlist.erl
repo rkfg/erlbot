@@ -8,5 +8,6 @@ modules() ->
      djcal,
      join,
      leave,
+     help,
      title
     ].
