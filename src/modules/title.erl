@@ -13,7 +13,9 @@ decode_string(Str) ->
 	    Result = case mbcs:decode(Str, cp1251) of
 			 {error, _, _} ->
 			     Str;
-		          Decoded ->
+			 {error, _} ->
+			     Str;
+		         Decoded ->
 			     Decoded
 		     end,
 	    Result;
@@ -28,6 +30,8 @@ decode_string(Str) ->
 		     end,
 	    case mbcs:decode(UniStr, utf8) of
 		{error, _, _} ->
+		    Str;
+		{error, _} ->
 		    Str;
 		Result ->
 		    Result
