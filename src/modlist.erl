@@ -9,5 +9,6 @@ modules() ->
      join,
      leave,
      help,
+     %%test,
      title
     ].

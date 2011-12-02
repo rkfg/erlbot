@@ -113,14 +113,14 @@ load_command([Com | Rest], Result) ->
 load_command([], Result) ->
     Result.
 
-join_room(Session, Room, Server, Nick) ->
-    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:available(), Room ++ "@" ++ Server ++ "/" ++ Nick)).
+%%join_room(Session, Room, Server, Nick) ->
+%%    join_room(Session, Room ++ "@" ++ Server, Nick).
 
 join_room(Session, Room, Nick) ->
     exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:available(), Room ++ "/" ++ Nick)).
     
-leave_room(Session, Room, Server, Nick) ->
-    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:unavailable(), Room ++ "@" ++ Server ++ "/" ++ Nick)).
+%%leave_room(Session, Room, Server, Nick) ->
+%%    leave_room(Session, Room ++ "@" ++ Server, Nick).
 
 leave_room(Session, Room, Nick) ->
     exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(exmpp_presence:unavailable(), Room ++ "/" ++ Nick)).
@@ -130,37 +130,43 @@ talker_link() ->
     gen_event:notify(manager, {talkerpid, TalkerPID}),
     {ok, TalkerPID}.
 
+say_text(Session, TalkAction, To, Text) ->
+    UniText = if
+		  is_binary(Text) ->
+		      case unicode:characters_to_list(Text) of
+			  {error, _, _} -> Text;
+			  R -> R
+		      end;
+		  true ->
+		      try list_to_binary(Text) of
+			  R ->
+			      case unicode:characters_to_list(R) of
+				  {error, _, _} -> Text;
+				  R2 -> R2
+			      end
+		      catch
+			  _:_ ->
+			      Text
+		      end
+	      end,
+    io:format("Saying ~ts in ~ts~n", [UniText, To]),
+    GroupArgs = case TalkAction of
+		    say ->
+			[unicode:characters_to_binary(UniText)];
+		    subject ->
+			[unicode:characters_to_binary(UniText), unicode:characters_to_binary(UniText)];
+		    _ ->
+			["Fail!"]
+		end,
+    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(apply(exmpp_message, groupchat, GroupArgs), To)).    
+
 talker(Session) ->
     receive
 	{TalkAction, To, Text} when Session =/= false andalso (TalkAction =:= say orelse TalkAction =:= subject) andalso is_list(Text) ->
-	    UniText = if
-			   is_binary(Text) ->
-                               case unicode:characters_to_list(Text) of
-                                   {error, _, _} -> Text;
-                                   R -> R
-                               end;
-			   true ->
-			       try list_to_binary(Text) of
-                                   R ->
-                                       case unicode:characters_to_list(R) of
-                                           {error, _, _} -> Text;
-                                           R2 -> R2
-                                       end
-			       catch
-				   _:_ ->
-				       Text
-			       end
-		       end,
-	    io:format("Saying ~ts in ~ts~n", [UniText, To]),
-	    GroupArgs = case TalkAction of
-		say ->
-		    [unicode:characters_to_binary(UniText)];
-		subject ->
-		    [unicode:characters_to_binary(UniText), unicode:characters_to_binary(UniText)];
-		_ ->
-		    ["Fail!"]
+	    try say_text(Session, TalkAction, To, Text)
+	    catch E:T ->
+		    io:format("Exception while talking: ~p:~p", [E, T])
 	    end,
-	    exmpp_session:send_packet(Session, exmpp_stanza:set_recipient(apply(exmpp_message, groupchat, GroupArgs), To)),
 	    timer:sleep(2000),
 	    talker(Session);
 	%% resend the message if session isn't established yet
