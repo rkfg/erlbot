@@ -101,13 +101,19 @@ load_command([Com | Rest], Result) ->
     	    ok
     end,
     code:load_file(Com),
-    {Commands, Function, Level} = Com:info(),
-    io:format("Processing ~p, Result is ~p~n", [{Commands, {Function, Level}}, Result]),
-    case Commands of
-	[A|_] when is_list(A) ->
-	    load_command(Rest, Result ++ [{Command, {Function, Level}} || Command <- Commands]);
-	_ ->
-	    load_command(Rest, Result ++ [{Commands, {Function, Level}}])
+    Cominfo = Com:info(),
+    case Cominfo of
+        {Commands, {_Module, _Func} = Function, Level} when is_list(Commands), is_integer(Level) ->
+            io:format("Processing ~p, Result is ~p~n", [{Commands, {Function, Level}}, Result]),
+            case Commands of
+                [A|_] when is_list(A) ->
+                    load_command(Rest, Result ++ [{Command, {Function, Level}} || Command <- Commands]);
+                _ ->
+                    load_command(Rest, Result ++ [{Commands, {Function, Level}}])
+            end;
+        _ ->
+            io:format("Module ~s returned bad info: ~p~n", [Com, Cominfo]),
+            load_command(Rest, Result)
     end;
 
 load_command([], Result) ->
