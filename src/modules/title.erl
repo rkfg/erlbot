@@ -38,18 +38,48 @@ decode_string(Str) ->
 	    end
     end.
 
-append_cur_peak(Data, Offset, {Cur, Peak}) ->
-    DataCur = binary_to_list(lists:nth(Offset + 6, Data)),
-    DataPeak = binary_to_list(lists:nth(Offset + 7, Data)),
-    {Cur ++ DataCur, Peak ++ DataPeak}.
+append_cur_peak(Data, {Cur, Peak}) ->
+    {DataCur, _} = get_field(Data, "Current Listeners:"),
+    {DataPeak, NewData} = get_field(Data, "Peak Listeners:"),
+    case DataCur of
+        null ->
+            NewCur = Cur;
+        _ ->
+            NewCur = Cur ++ [DataCur]
+    end,
+    case DataPeak of
+        null ->
+            NewPeak = Peak;
+        _ ->
+            NewPeak = Peak ++ [DataPeak]
+    end,
+    {NewCur, NewPeak, NewData}.
 
-append_listeners(Data, [], Offset, {Cur, Peak}) ->
-    {NewCur, NewPeak} = append_cur_peak(Data, Offset, {Cur, Peak}),
+append_listeners([], {Cur, Peak}) ->
+    NewCur = string:join(Cur, "+"),
+    NewPeak = string:join(Peak, "+"),
     NewCur ++ "/" ++ NewPeak;
 
-append_listeners(Data, [_Mount|Tail], Offset, {Cur, Peak}) ->
-    {NewCur, NewPeak} = append_cur_peak(Data, Offset, {Cur, Peak}),
-    append_listeners(Data, Tail, Offset + 9, {NewCur ++ "+", NewPeak ++ "+"}).
+append_listeners(Data, {Cur, Peak}) ->
+    {NewCur, NewPeak, NewData} = append_cur_peak(Data, {Cur, Peak}),
+    append_listeners(NewData, {NewCur, NewPeak}).
+
+get_field([Fieldname, Fieldvalue|Rest], Field) ->
+    Fieldlist = unicode:characters_to_list(Fieldname),
+    case Fieldlist of
+        Field ->
+            {unicode:characters_to_list(Fieldvalue), Rest};
+        _ ->
+            get_field(Rest, Field)
+    end;
+
+get_field(_, Field) ->
+    case Field of
+        "Current Song:" ->
+            {"[без названия]", []};
+        _ ->
+            {null, []}
+    end.
 
 get_title() ->
     case httpc:request(get, {"http://radioanon.ru:8000", []}, [], []) of
@@ -59,10 +89,10 @@ get_title() ->
 	    case Mounts of
 		[] ->
 		    Title = SongTitle = "Никто не вещает.";
-		[_|Tail] ->
-		    Data = mochiweb_xpath:execute("//div[@class='streamheader']/following-sibling::table//td[@class='streamdata']/text()", ParsedPage),
-		    SongTitle = unicode:characters_to_list(lists:nth(9, Data)),
-		    Title = SongTitle ++ " [" ++ append_listeners(Data, Tail, 0, {[], []}) ++ "]"
+		[_|_] ->
+		    Data = mochiweb_xpath:execute("//div[@class='streamheader']/following-sibling::table//td/text()", ParsedPage),
+		    {SongTitle, _} = get_field(Data, "Current Song:"),
+		    Title = SongTitle ++ " [" ++ append_listeners(Data, {[], []}) ++ "]"
 	    end;
 	_ ->
 	    Title = SongTitle = "Не удалось получить данные."
