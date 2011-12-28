@@ -77,7 +77,7 @@ session(JID, Password) ->
     %% Create a new session with basic (digest) authentication:
     exmpp_session:auth_basic_digest(MySession, MyJID, Password),
     %% Connect in standard TCP:
-    exmpp_session:connect_TCP(MySession, ConnServer, 5222, [{whitespace_ping, 30}]),
+    exmpp_session:connect_TCP(MySession, ConnServer, 5222, [{whitespace_ping, 30}, {compression, false}]),
     %% Login with defined JID / Authentication:
     try exmpp_session:login(MySession, "DIGEST-MD5")
     catch
@@ -347,7 +347,7 @@ responder(Fun, Args, FromJID, Level) ->
 			   "" ->
 			       empty;
 			   Reply ->	
-			       Nick ++ ", " ++ Reply
+			       ?FMT("~s, ~ts", [unicode:characters_to_binary(Nick), Reply])
 		       end;
 		   true ->
 		       ?FMT("~s, недостаточно прав для выполнения команды.", [unicode:characters_to_binary(Nick)])
